@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>CyberFinger — 2-Player AI Hand Pong & Finger Tracking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- MediaPipe Hands & Camera Utils -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="app" class="app-container">
+    <!-- Top Navigation / Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <span class="finger-pulse"></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a2 2 0 0 0-2 2v7.5a.5.5 0 0 1-1 0V5a2 2 0 0 0-4 0v9a8 8 0 0 0 16 0V8a2 2 0 0 0-4 0v3.5a.5.5 0 0 1-1 0V3a2 2 0 0 0-2-2z"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>CyberPong <span class="badge">2-PLAYER AI</span></h1>
+          <p class="subtitle">Hand Tracking & Swatting Battle</p>
+        </div>
+      </div>
+
+      <!-- Mode Selector Tabs -->
+      <nav class="mode-nav">
+        <button class="mode-btn active" data-mode="pong">
+          <span class="icon">🏓</span>
+          <span class="label">2P Cyber Pong</span>
+        </button>
+        <button class="mode-btn" data-mode="physics">
+          <span class="icon">🫧</span>
+          <span class="label">Physics Orbs</span>
+        </button>
+        <button class="mode-btn" data-mode="draw">
+          <span class="icon">🎨</span>
+          <span class="label">Air Canvas</span>
+        </button>
+        <button class="mode-btn" data-mode="trail">
+          <span class="icon">✨</span>
+          <span class="label">Stardust Trail</span>
+        </button>
+        <button class="mode-btn" data-mode="audio">
+          <span class="icon">🎵</span>
+          <span class="label">Synth Theremin</span>
+        </button>
+      </nav>
+
+      <!-- Status Indicators & Actions -->
+      <div class="header-actions">
+        <div class="status-pill" id="fpsPill">
+          <span class="status-dot green"></span>
+          <span id="fpsCounter">-- FPS</span>
+        </div>
+        <button id="toggleCameraBtn" class="pill-btn primary">
+          <span class="btn-icon">📹</span>
+          <span id="cameraBtnText">Enable Camera</span>
+        </button>
+        <button id="helpBtn" class="pill-btn icon-only" title="Help & Game Guide" aria-label="Help">
+          ❓
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Viewport Area -->
+    <main class="viewport-wrapper">
+      <!-- Hidden Video Element for Webcam Input -->
+      <video id="webcam" playsinline muted autoplay></video>
+
+      <!-- Interactive Canvas Layer -->
+      <canvas id="renderCanvas"></canvas>
+
+      <!-- Floating 2-Player Pong Scoreboard -->
+      <div class="pong-scoreboard" id="pongScoreboard">
+        <div class="score-card p1-card">
+          <div class="player-tag">
+            <span class="player-dot cyan"></span>
+            <span class="player-name">PLAYER 1</span>
+          </div>
+          <div class="score-num cyan" id="scoreP1">0</div>
+          <span class="sub-label">LEFT GOAL</span>
+        </div>
+
+        <div class="score-center">
+          <div class="match-badge" id="matchStatusBadge">FIRST TO 5</div>
+          <div class="score-versus">VS</div>
+          <div class="game-btn-group">
+            <button id="toggleBotBtn" class="pill-btn mini secondary" title="Toggle AI Bot for Player 2">
+              🤖 Bot: OFF
+            </button>
+            <button id="resetScoreBtn" class="pill-btn mini danger" title="Reset Match Score">
+              ↺ Reset
+            </button>
+          </div>
+        </div>
+
+        <div class="score-card p2-card">
+          <div class="player-tag">
+            <span class="player-dot pink"></span>
+            <span class="player-name" id="p2TitleText">PLAYER 2</span>
+          </div>
+          <div class="score-num pink" id="scoreP2">0</div>
+          <span class="sub-label">RIGHT GOAL</span>
+        </div>
+      </div>
+
+      <!-- Floating HUD / Telemetry Card -->
+      <div class="hud-panel left" id="telemetryHud">
+        <div class="hud-header">
+          <span class="hud-title">HAND TELEMETRY</span>
+          <span class="hud-chip" id="trackingStatusBadge">STANDBY</span>
+        </div>
+        <div class="hud-body">
+          <div class="metric-row">
+            <span class="metric-label">Hands Tracked:</span>
+            <span class="metric-val highlight" id="hudHandsCount">0 / 2</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">P1 Swat Speed:</span>
+            <span class="metric-val cyan-text" id="hudP1Speed">0 px/s</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">P2 Swat Speed:</span>
+            <span class="metric-val pink-text" id="hudP2Speed">0 px/s</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Ball Speed:</span>
+            <span class="metric-val" id="hudBallSpeed">0 px/s</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Smash Power:</span>
+            <span class="metric-val gesture-badge" id="hudSmashStatus">READY</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mode Specific Floating Toolbar (Air Canvas options) -->
+      <div class="floating-toolbar" id="airCanvasToolbar" style="display: none;">
+        <div class="toolbar-group">
+          <label>Color</label>
+          <div class="color-picker-row">
+            <button class="color-swatch active" style="--c: #00f5d4;" data-color="#00f5d4"></button>
+            <button class="color-swatch" style="--c: #ff007f;" data-color="#ff007f"></button>
+            <button class="color-swatch" style="--c: #9d4edd;" data-color="#9d4edd"></button>
+            <button class="color-swatch" style="--c: #ffe600;" data-color="#ffe600"></button>
+            <button class="color-swatch" style="--c: #00b4d8;" data-color="#00b4d8"></button>
+            <button class="color-swatch" style="--c: #ffffff;" data-color="#ffffff"></button>
+          </div>
+        </div>
+        <div class="toolbar-divider"></div>
+        <div class="toolbar-group">
+          <label>Size</label>
+          <input type="range" id="brushSize" min="2" max="30" value="6" class="cyber-slider">
+          <span id="brushSizeVal">6px</span>
+        </div>
+        <div class="toolbar-divider"></div>
+        <div class="toolbar-group">
+          <button id="clearCanvasBtn" class="pill-btn mini danger">Clear</button>
+          <button id="saveCanvasBtn" class="pill-btn mini secondary">Snapshot</button>
+        </div>
+      </div>
+
+      <!-- Floating Controls / Settings Bar -->
+      <div class="hud-panel bottom-controls">
+        <div class="control-item">
+          <label for="skeletonToggle" class="switch-label">
+            <input type="checkbox" id="skeletonToggle" checked>
+            <span class="toggle-switch"></span>
+            Skeleton Grid
+          </label>
+        </div>
+        <div class="control-item">
+          <label for="cameraFeedToggle" class="switch-label">
+            <input type="checkbox" id="cameraFeedToggle" checked>
+            <span class="toggle-switch"></span>
+            Video Feed
+          </label>
+        </div>
+        <div class="control-item">
+          <label for="mirrorToggle" class="switch-label">
+            <input type="checkbox" id="mirrorToggle" checked>
+            <span class="toggle-switch"></span>
+            Mirror View
+          </label>
+        </div>
+        <div class="control-item">
+          <label for="soundToggle" class="switch-label">
+            <input type="checkbox" id="soundToggle" checked>
+            <span class="toggle-switch"></span>
+            Game Audio & FX
+          </label>
+        </div>
+        <div class="control-item slider-item">
+          <label>Feed Dimmer</label>
+          <input type="range" id="feedOpacitySlider" min="0.1" max="1" step="0.05" value="0.75" class="cyber-slider">
+        </div>
+      </div>
+
+      <!-- In-Game Goal & Match Overlay Announcement -->
+      <div class="game-announcement" id="gameAnnouncement" style="display: none;">
+        <h2 id="announcementTitle">GOAL!</h2>
+        <p id="announcementSub">PLAYER 1 SCORED</p>
+      </div>
+
+      <!-- Gesture Helper Ribbon / Toast -->
+      <div class="gesture-hint-ribbon" id="gestureHintRibbon">
+        <span class="hint-icon">🏓</span>
+        <span class="hint-text" id="hintText">P1 (Left hand) vs P2 (Right hand): Swat the ball into the opposing goal! Fast swings trigger SUPER SMASH!</span>
+      </div>
+
+      <!-- Touch/Pointer Mode Quick Banner (when camera is off) -->
+      <div class="mode-banner" id="touchNoticeBanner">
+        <span>Touch or drag with fingers on screen, or enable camera for 2-hand AI tracking!</span>
+      </div>
+    </main>
+
+    <!-- Help & Gesture Modal Dialog -->
+    <dialog id="helpModal" class="cyber-dialog">
+      <div class="dialog-content">
+        <div class="dialog-header">
+          <h2>CyberPong: 2-Player Hand Swatting Battle</h2>
+          <button id="closeHelpBtn" class="close-btn" aria-label="Close modal">&times;</button>
+        </div>
+        <div class="dialog-body">
+          <div class="gesture-grid">
+            <div class="gesture-card">
+              <div class="card-icon">🏓</div>
+              <h3>2-Player Hand Pong</h3>
+              <p>Two players stand facing the camera (or 1 player uses both hands / plays vs AI Bot). <strong>Player 1</strong> defends the Left Goal; <strong>Player 2</strong> defends the Right Goal.</p>
+            </div>
+            <div class="gesture-card">
+              <div class="card-icon">⚡</div>
+              <h3>Swat & Super Smash</h3>
+              <p>Swat the ball with your fingertip or open palm. Swing your hand fast ($>400\text{ px/s}$) to trigger a <strong>Fiery Super Smash</strong> with screen shake!</p>
+            </div>
+            <div class="gesture-card">
+              <div class="card-icon">🤖</div>
+              <h3>Solo Mode vs AI Bot</h3>
+              <p>Playing by yourself? Click the <strong>"Bot: ON"</strong> button on the scoreboard. An intelligent AI opponent will control Player 2 and return your swats!</p>
+            </div>
+            <div class="gesture-card">
+              <div class="card-icon">🎨</div>
+              <h3>Sandbox Modes Included</h3>
+              <p>Switch modes at the top anytime for <strong>Physics Orbs</strong>, <strong>Air Canvas</strong> (pinch to draw), <strong>Stardust Trails</strong>, and <strong>Synth Theremin</strong>.</p>
+            </div>
+          </div>
+          <div class="dialog-privacy-note">
+            <span class="lock-icon">🔒</span>
+            <div>
+              <strong>100% Private & Real-Time On-Device:</strong>
+              <p>Neural vision hand inference runs locally in your browser via WebGL and WebAssembly. No video frames or images ever leave your device.</p>
+            </div>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button id="modalGotItBtn" class="pill-btn primary">Let's Play CyberPong!</button>
+        </div>
+      </div>
+    </dialog>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
